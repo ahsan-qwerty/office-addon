@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Assistant</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 16px; }
+      button { margin-right: 8px; margin-bottom: 12px; }
+      li { margin: 6px 0; }
+      .reason { color: #555; margin-right: 6px; }
+      .anchor { font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h3>AI Assistant</h3>
+    <div>
+      <button onclick="improveSelection()">Improve selection</button>
+      <button onclick="reviewWholeDoc()">Review whole doc</button>
+    </div>
+    <ul id="suggestions"></ul>
+
+    <script src="/taskpane.js"></script>
+    <script>
+      window.renderSuggestions = (items) => {
+        const ul = document.getElementById("suggestions");
+        ul.innerHTML = "";
+        (items || []).forEach((s) => {
+          const li = document.createElement("li");
+          li.innerHTML = `<span class=\"reason\">${s.reason}:</span> <span class=\"anchor\">${s.anchor}</span> → ${s.replacement} <button>Apply</button>`;
+          li.querySelector("button").onclick = () => (window).applySuggestion(s.anchor, s.replacement);
+          ul.appendChild(li);
+        });
+      };
+    </script>
+  </body>
+  </html>
+
+
