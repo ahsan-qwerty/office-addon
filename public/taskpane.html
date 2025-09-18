@@ -19,6 +19,18 @@
       <button onclick="improveSelection()">Improve selection</button>
       <button onclick="reviewWholeDoc()">Review whole doc</button>
     </div>
+    <div id="bulk-actions" style="margin: 8px 0; display: none;">
+      <button id="acceptAllBtn">Accept all</button>
+      <button id="clearBtn">Clear list</button>
+    </div>
+    <div id="fulltext" style="display:none; margin-top:12px;">
+      <h4>Proposed full document</h4>
+      <textarea id="fulltextValue" style="width:100%; height:160px;"></textarea>
+      <div style="margin-top:8px;">
+        <button id="acceptFullBtn">Accept full text</button>
+        <button id="rejectFullBtn">Reject</button>
+      </div>
+    </div>
     <ul id="suggestions"></ul>
 
     <script src="/taskpane.js"></script>
@@ -26,13 +38,49 @@
       window.renderSuggestions = (items) => {
         const ul = document.getElementById("suggestions");
         ul.innerHTML = "";
-        (items || []).forEach((s) => {
+        const list = Array.isArray(items) ? items : [];
+        window.__LAST_SUGGESTIONS__ = list;
+        const bulk = document.getElementById("bulk-actions");
+        bulk.style.display = list.length ? "block" : "none";
+        const acceptAllBtn = document.getElementById("acceptAllBtn");
+        const clearBtn = document.getElementById("clearBtn");
+        acceptAllBtn.onclick = () => (window).applyAllSuggestions(window.__LAST_SUGGESTIONS__ || []);
+        clearBtn.onclick = () => {
+          ul.innerHTML = "";
+          bulk.style.display = "none";
+          window.__LAST_SUGGESTIONS__ = [];
+        };
+        list.forEach((s, idx) => {
           const li = document.createElement("li");
-          li.innerHTML = `<span class=\"reason\">${s.reason}:</span> <span class=\"anchor\">${s.anchor}</span> → ${s.replacement} <button>Apply</button>`;
-          li.querySelector("button").onclick = () => (window).applySuggestion(s.anchor, s.replacement);
+          li.innerHTML = `<span class=\"reason\">${s.reason}:</span> <span class=\"anchor\">${s.anchor}</span> → ${s.replacement} <button data-action=\"accept\">Accept</button> <button data-action=\"reject\">Reject</button>`;
+          li.querySelector('button[data-action="accept"]').onclick = async () => {
+            await (window).applySuggestion(s.anchor, s.replacement);
+            li.remove();
+          };
+          li.querySelector('button[data-action="reject"]').onclick = () => {
+            li.remove();
+          };
           ul.appendChild(li);
         });
       };
+
+      window.renderFullText = (text) => {
+        const box = document.getElementById("fulltext");
+        const ta = document.getElementById("fulltextValue");
+        const accept = document.getElementById("acceptFullBtn");
+        const reject = document.getElementById("rejectFullBtn");
+        box.style.display = "block";
+        ta.value = text || "";
+        accept.onclick = async () => {
+          await (window).replaceWholeDocument(ta.value);
+          box.style.display = "none";
+          ta.value = "";
+        };
+        reject.onclick = () => {
+          box.style.display = "none";
+          ta.value = "";
+        };
+      }
     </script>
   </body>
   </html>

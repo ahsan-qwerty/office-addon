@@ -29,9 +29,12 @@ async function reviewWholeDoc() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: body.text }),
     });
-    const { suggestions } = await response.json();
-
-    window.renderSuggestions(suggestions || []);
+    const data = await response.json();
+    if (typeof data.fullText === "string" && data.fullText.length) {
+      window.renderFullText(data.fullText);
+      return;
+    }
+    window.renderSuggestions(data.suggestions || []);
   });
 }
 
@@ -55,3 +58,24 @@ async function applySuggestion(anchor, replacement) {
 window.improveSelection = improveSelection;
 window.reviewWholeDoc = reviewWholeDoc;
 window.applySuggestion = applySuggestion;
+async function applyAllSuggestions(suggestions) {
+  const sorted = [...(suggestions || [])].sort(
+    (a, b) => (b.anchor?.length || 0) - (a.anchor?.length || 0)
+  );
+  for (const s of sorted) {
+    // eslint-disable-next-line no-await-in-loop
+    await applySuggestion(s.anchor, s.replacement);
+  }
+}
+
+window.applyAllSuggestions = applyAllSuggestions;
+
+async function replaceWholeDocument(newText) {
+  await Word.run(async (context) => {
+    const body = context.document.body;
+    body.insertText(newText || "", Word.InsertLocation.replace);
+    await context.sync();
+  });
+}
+
+window.replaceWholeDocument = replaceWholeDocument;

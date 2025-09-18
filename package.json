@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "express": "^5.1.0",
+    "json5": "^2.2.3",
     "office-addin-dev-certs": "^2.0.3",
     "office-addin-dev-settings": "^3.0.3"
   }

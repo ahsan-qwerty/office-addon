@@ -3,8 +3,16 @@ const path = require("path");
 const os = require("os");
 const https = require("https");
 const express = require("express");
+const JSON5 = require("json5");
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
+const AI_API_URL =
+  process.env.AI_API_URL || "http://localhost:3000/api/office-addin";
+const IMPROVE_URL =
+  process.env.IMPROVE_URL || "http://localhost:3000/api/office-addin/improve"; // absolute or relative
+const REVIEW_URL =
+  process.env.REVIEW_URL || "http://localhost:3000/api/office-addin/review"; // absolute or relative
+// const AI_API_KEY = process.env.AI_API_KEY || null; // disabled per request
 
 function getCertificatePaths() {
   const homeDir = os.homedir();
@@ -40,25 +48,107 @@ app.get("/", (_req, res) => {
   res.redirect("/taskpane.html");
 });
 
-// Stub API endpoints
-app.post("/api/improve", (req, res) => {
+async function callAI(endpointOrPath, payload) {
+  if (!AI_API_URL) {
+    // Allow absolute URLs even if AI_API_URL is not set
+    const isAbsolute = /^https?:\/\//i.test(endpointOrPath || "");
+    if (!isAbsolute) {
+      throw new Error(
+        "AI_API_URL is not configured and endpoint is not absolute"
+      );
+    }
+  }
+  const url = /^https?:\/\//i.test(endpointOrPath)
+    ? endpointOrPath
+    : new URL(endpointOrPath, AI_API_URL).toString();
+  const headers = { "Content-Type": "application/json" };
+  // if (AI_API_KEY) headers["Authorization"] = `Bearer ${AI_API_KEY}`; // disabled per request
+  const resp = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload || {}),
+  });
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`AI API ${resp.status}: ${text}`);
+  }
+  const text = await resp.text();
+  return text;
+}
+
+// Improve selection → proxy to AI or fallback to stub
+app.post("/api/improve", async (req, res) => {
   const { selectedText } = req.body || {};
+  if (true) {
+    try {
+      const target = IMPROVE_URL || "/improve";
+      console.log(`[proxy] /api/improve → ${target}`);
+      let raw = await callAI(target, { text: selectedText });
+      let improvedText = "";
+      try {
+        const parsed = JSON.parse(raw);
+        improvedText =
+          typeof parsed === "string" ? parsed : parsed?.improvedText || "";
+      } catch (_) {
+        try {
+          const parsed5 = JSON5.parse(raw);
+          improvedText =
+            typeof parsed5 === "string" ? parsed5 : parsed5?.improvedText || "";
+        } catch (_) {
+          improvedText = String(raw);
+        }
+      }
+      return res.json({ improvedText });
+    } catch (err) {
+      console.error("[proxy] /api/improve failed, falling back to stub:", err);
+      return res.status(502).json({ error: "Improve failed" });
+    }
+  }
+  console.log("[stub] /api/improve using local uppercase fallback");
   const improvedText =
     typeof selectedText === "string" ? selectedText.toUpperCase() : "";
-  res.json({ improvedText });
+  return res.json({ improvedText });
 });
 
-app.post("/api/review", (req, res) => {
+// Review whole doc → proxy to AI or fallback to stub
+app.post("/api/review", async (req, res) => {
   const { text } = req.body || {};
-  const suggestions = [];
-  if (typeof text === "string" && text.toLowerCase().includes("utilize")) {
-    suggestions.push({
-      anchor: "utilize",
-      replacement: "use",
-      reason: "Clarity",
-    });
+  if (REVIEW_URL || AI_API_URL) {
+    try {
+      const target = REVIEW_URL || "/review";
+      console.log(`[proxy] /api/review → ${target}`);
+      let raw = await callAI(target, { text });
+      console.log("[api/review] raw →", raw);
+      let fullText = "";
+      // Prefer strict JSON → JSON5 → raw string
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === "string") fullText = parsed;
+        else if (parsed && typeof parsed.fullText === "string")
+          fullText = parsed.fullText;
+        else if (parsed && typeof parsed.replacement === "string")
+          fullText = parsed.replacement;
+      } catch {
+        try {
+          const parsed5 = JSON5.parse(raw);
+          if (typeof parsed5 === "string") fullText = parsed5;
+          else if (parsed5 && typeof parsed5.fullText === "string")
+            fullText = parsed5.fullText;
+          else if (parsed5 && typeof parsed5.replacement === "string")
+            fullText = parsed5.replacement;
+        } catch {
+          fullText = String(raw);
+        }
+      }
+      return res.json({ fullText });
+    } catch (err) {
+      console.error("[proxy] /api/review failed:", err);
+      return res.status(502).json({ error: "Review failed" });
+    }
   }
-  res.json({ suggestions });
+  // Stub fallback: return current document text as proposed text
+  console.log("[stub] /api/review returning body text as fullText");
+  return res.json({ fullText: typeof text === "string" ? text : "" });
 });
 
 const { key, cert } = ensureCertificates();
