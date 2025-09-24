@@ -34,7 +34,9 @@ async function reviewWholeDoc() {
       window.renderFullText(data.fullText);
       return;
     }
-    window.renderSuggestions(data.suggestions || []);
+    const list = data.suggestions || [];
+    window.renderSuggestions(list);
+    await window.highlightSuggestions(list);
   });
 }
 
@@ -79,3 +81,61 @@ async function replaceWholeDocument(newText) {
 }
 
 window.replaceWholeDocument = replaceWholeDocument;
+
+const HIGHLIGHT_COLORS = ["#F0F8FF"];
+
+async function highlightSuggestions(suggestions) {
+  const list = Array.isArray(suggestions) ? suggestions : [];
+  if (!list.length) return;
+  await Word.run(async (context) => {
+    const body = context.document.body;
+    const resultsByIndex = [];
+    list.forEach((s, idx) => {
+      const results = body.search(s.anchor || "", {
+        matchCase: false,
+        matchWholeWord: true,
+      });
+      results.load("items");
+      resultsByIndex.push({ idx, results });
+    });
+    await context.sync();
+    resultsByIndex.forEach(({ idx, results }) => {
+      const color = HIGHLIGHT_COLORS[0];
+      results.items.forEach((r) => {
+        r.font.highlightColor = color;
+      });
+    });
+    await context.sync();
+  });
+}
+
+async function clearHighlightsForAnchor(anchor) {
+  if (!anchor) return;
+  await Word.run(async (context) => {
+    const body = context.document.body;
+    const results = body.search(anchor, {
+      matchCase: false,
+      matchWholeWord: true, // make consistent with highlightSuggestions
+    });
+    results.load("items");
+    await context.sync();
+
+    results.items.forEach((r) => {
+      r.font.highlightColor = null; // clears highlight
+    });
+
+    await context.sync();
+  });
+}
+
+async function clearAllHighlights(suggestions) {
+  const list = Array.isArray(suggestions) ? suggestions : [];
+  for (const s of list) {
+    // eslint-disable-next-line no-await-in-loop
+    await clearHighlightsForAnchor(s.anchor);
+  }
+}
+
+window.highlightSuggestions = highlightSuggestions;
+window.clearHighlightsForAnchor = clearHighlightsForAnchor;
+window.clearAllHighlights = clearAllHighlights;

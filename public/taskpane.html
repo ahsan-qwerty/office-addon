@@ -6,32 +6,71 @@
     <title>AI Assistant</title>
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
     <style>
-      body { font-family: Segoe UI, Arial, sans-serif; margin: 16px; }
-      button { margin-right: 8px; margin-bottom: 12px; }
-      li { margin: 6px 0; }
-      .reason { color: #555; margin-right: 6px; }
-      .anchor { font-weight: bold; }
+      :root {
+        --bg: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --primary: #2563eb;
+        --primary-600: #1d4ed8;
+        --border: #e5e7eb;
+        --surface: #f9fafb;
+        --accent: #10b981;
+        --danger: #ef4444;
+      }
+      * { box-sizing: border-box; }
+      body { font-family: Segoe UI, Arial, sans-serif; margin: 0; color: var(--text); background: var(--bg); }
+      .container { padding: 16px; }
+      h3 { margin: 0 0 12px; font-weight: 600; }
+      .actions { display: flex; gap: 8px; margin-bottom: 12px; }
+      .btn { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+      .btn:hover { background: #eef2ff; border-color: #dbeafe; }
+      .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+      .btn-primary:hover { background: var(--primary-600); border-color: var(--primary-600); }
+      .btn-ghost { background: transparent; }
+      .btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+      .toolbar .right { display: flex; gap: 8px; }
+      ul { list-style: none; padding: 0; margin: 0; }
+      li { margin: 10px 0; }
+      .card { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+      .card .reason { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: block; }
+      .card .anchor { display: block; font-weight: 600; margin: 2px 0 4px; }
+      .card .replacement { display: block; color: var(--text); }
+      .card .swap { color: var(--muted); font-size: 12px; margin: 6px 0; }
+      .card .buttons { display: flex; gap: 8px; margin-top: 8px; }
+      #bulk-actions { margin: 8px 0; display: none; }
+      #fulltext { display: none; margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+      #fulltext h4 { margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
+      #fulltext .content { padding: 12px; }
+      #fulltextValue { width: 100%; height: 200px; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--surface); font-family: Consolas, Monaco, 'Segoe UI Mono', monospace; font-size: 12px; }
     </style>
   </head>
   <body>
-    <h3>AI Assistant</h3>
-    <div>
-      <button onclick="improveSelection()">Improve selection</button>
-      <button onclick="reviewWholeDoc()">Review whole doc</button>
-    </div>
-    <div id="bulk-actions" style="margin: 8px 0; display: none;">
-      <button id="acceptAllBtn">Accept all</button>
-      <button id="clearBtn">Clear list</button>
-    </div>
-    <div id="fulltext" style="display:none; margin-top:12px;">
-      <h4>Proposed full document</h4>
-      <textarea id="fulltextValue" style="width:100%; height:160px;"></textarea>
-      <div style="margin-top:8px;">
-        <button id="acceptFullBtn">Accept full text</button>
-        <button id="rejectFullBtn">Reject</button>
+    <div class="container">
+      <h3>AI Assistant</h3>
+      <div class="actions">
+        <!-- <button class="btn" onclick="improveSelection()">Improve selection</button> -->
+        <button class="btn btn-primary" onclick="reviewWholeDoc()">Review whole doc</button>
       </div>
+      <div class="toolbar">
+        <div class="left" id="bulk-actions">
+          <button class="btn" id="acceptAllBtn">Accept all</button>
+          <button class="btn btn-ghost" id="clearBtn">Clear list</button>
+        </div>
+        <div class="right"></div>
+      </div>
+      <div id="fulltext">
+        <h4>Proposed full document</h4>
+        <div class="content">
+          <textarea id="fulltextValue"></textarea>
+          <div class="actions" style="margin-top:8px;">
+            <button class="btn btn-primary" id="acceptFullBtn">Accept full text</button>
+            <button class="btn btn-ghost" id="rejectFullBtn">Reject</button>
+          </div>
+        </div>
+      </div>
+      <ul id="suggestions"></ul>
     </div>
-    <ul id="suggestions"></ul>
 
     <script src="/taskpane.js"></script>
     <script>
@@ -44,21 +83,47 @@
         bulk.style.display = list.length ? "block" : "none";
         const acceptAllBtn = document.getElementById("acceptAllBtn");
         const clearBtn = document.getElementById("clearBtn");
-        acceptAllBtn.onclick = () => (window).applyAllSuggestions(window.__LAST_SUGGESTIONS__ || []);
+        acceptAllBtn.onclick = async () => {
+          await (window).applyAllSuggestions(window.__LAST_SUGGESTIONS__ || []);
+          await (window).clearAllHighlights(window.__LAST_SUGGESTIONS__ || []);
+          ul.innerHTML = "";
+          bulk.style.display = "none";
+          window.__LAST_SUGGESTIONS__ = [];
+        };
         clearBtn.onclick = () => {
           ul.innerHTML = "";
           bulk.style.display = "none";
           window.__LAST_SUGGESTIONS__ = [];
         };
-        list.forEach((s, idx) => {
+        list.forEach((s) => {
           const li = document.createElement("li");
-          li.innerHTML = `<span class=\"reason\">${s.reason}:</span> <span class=\"anchor\">${s.anchor}</span> → ${s.replacement} <button data-action=\"accept\">Accept</button> <button data-action=\"reject\">Reject</button>`;
+          li.className = "card";
+          li.innerHTML = `
+            <span class="reason">${s.reason || "Suggestion"}</span>
+            <span class="anchor">${s.anchor || ""}</span>
+            <div class="swap">→</div>
+            <span class="replacement">${s.replacement || ""}</span>
+            <div class="buttons">
+              <button class="btn btn-primary" data-action="accept">Accept</button>
+              <button class="btn btn-ghost" data-action="reject">Reject</button>
+            </div>
+          `;
           li.querySelector('button[data-action="accept"]').onclick = async () => {
+            await (window).clearHighlightsForAnchor(s.anchor);
             await (window).applySuggestion(s.anchor, s.replacement);
             li.remove();
+            if (!ul.children.length) {
+              bulk.style.display = "none";
+              window.__LAST_SUGGESTIONS__ = [];
+            }
           };
-          li.querySelector('button[data-action="reject"]').onclick = () => {
+          li.querySelector('button[data-action="reject"]').onclick = async () => {
+            await (window).clearHighlightsForAnchor(s.anchor);
             li.remove();
+            if (!ul.children.length) {
+              bulk.style.display = "none";
+              window.__LAST_SUGGESTIONS__ = [];
+            }
           };
           ul.appendChild(li);
         });

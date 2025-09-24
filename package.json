@@ -9,6 +9,7 @@
   "scripts": {
     "dev-cert": "npx office-addin-dev-certs install --days 365",
     "start": "node server.js",
+    "dev": "nodemon app.js",
     "sideload": "npx office-addin-dev-settings sideload manifest.xml desktop",
     "unsideload": "npx office-addin-dev-settings unregister manifest.xml"
   },
@@ -17,5 +18,8 @@
     "json5": "^2.2.3",
     "office-addin-dev-certs": "^2.0.3",
     "office-addin-dev-settings": "^3.0.3"
+  },
+  "dependencies": {
+    "nodemon": "^3.1.10"
   }
 }

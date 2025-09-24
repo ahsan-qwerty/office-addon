@@ -117,38 +117,48 @@ app.post("/api/review", async (req, res) => {
     try {
       const target = REVIEW_URL || "/review";
       console.log(`[proxy] /api/review → ${target}`);
-      let raw = await callAI(target, { text });
+      const raw = await callAI(target, { text });
       console.log("[api/review] raw →", raw);
-      let fullText = "";
-      // Prefer strict JSON → JSON5 → raw string
+      // Prefer suggestions list if present; otherwise treat as full document text
       try {
         const parsed = JSON.parse(raw);
-        if (typeof parsed === "string") fullText = parsed;
-        else if (parsed && typeof parsed.fullText === "string")
-          fullText = parsed.fullText;
-        else if (parsed && typeof parsed.replacement === "string")
-          fullText = parsed.replacement;
-      } catch {
-        try {
-          const parsed5 = JSON5.parse(raw);
-          if (typeof parsed5 === "string") fullText = parsed5;
-          else if (parsed5 && typeof parsed5.fullText === "string")
-            fullText = parsed5.fullText;
-          else if (parsed5 && typeof parsed5.replacement === "string")
-            fullText = parsed5.replacement;
-        } catch {
-          fullText = String(raw);
+        if (parsed && Array.isArray(parsed.suggestions)) {
+          return res.json({ suggestions: parsed.suggestions });
         }
-      }
-      return res.json({ fullText });
+        if (typeof parsed === "string") {
+          return res.json({ fullText: parsed });
+        }
+        if (parsed && typeof parsed.fullText === "string") {
+          return res.json({ fullText: parsed.fullText });
+        }
+        if (parsed && typeof parsed.replacement === "string") {
+          return res.json({ fullText: parsed.replacement });
+        }
+      } catch {}
+      try {
+        const parsed5 = JSON5.parse(raw);
+        if (parsed5 && Array.isArray(parsed5.suggestions)) {
+          return res.json({ suggestions: parsed5.suggestions });
+        }
+        if (typeof parsed5 === "string") {
+          return res.json({ fullText: parsed5 });
+        }
+        if (parsed5 && typeof parsed5.fullText === "string") {
+          return res.json({ fullText: parsed5.fullText });
+        }
+        if (parsed5 && typeof parsed5.replacement === "string") {
+          return res.json({ fullText: parsed5.replacement });
+        }
+      } catch {}
+      return res.json({ fullText: String(raw) });
     } catch (err) {
       console.error("[proxy] /api/review failed:", err);
       return res.status(502).json({ error: "Review failed" });
     }
   }
-  // Stub fallback: return current document text as proposed text
-  console.log("[stub] /api/review returning body text as fullText");
-  return res.json({ fullText: typeof text === "string" ? text : "" });
+  // Stub fallback: return empty suggestions
+  console.log("[stub] /api/review using local suggestion fallback");
+  return res.json({ suggestions: [] });
 });
 
 const { key, cert } = ensureCertificates();
